@@ -1,8 +1,12 @@
 package com.example.demo.entity;
 
-import lombok.Data;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.ToString;
 
-@Data
+@Builder
+@Getter
+@ToString
 public class Contact {
     private String name;
     private String phones;

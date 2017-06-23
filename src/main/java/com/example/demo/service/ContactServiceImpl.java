@@ -21,77 +21,89 @@ public class ContactServiceImpl implements ContactService {
 
     @Transactional
     @Override
-    public List<DbContact> createContact(RawContact rawContact) {
+    public Contact createContact(RawContact rawContact) {
         List<DbContact> dbContacts = new ArrayList<>();
         Contact contact = transformRawContactToContact(rawContact);
         List<String> phones = new ArrayList<>(Arrays.asList(contact.getPhones().split("\\s*,\\s*")));
         phones.forEach(phone -> {
-            DbContact dbContact = new DbContact();
-            dbContact.setName(contact.getName());
-            dbContact.setPhone(phone);
+            DbContact dbContact = DbContact.builder().name(rawContact.getName()).phone(phone).build();
             dbContactDao.save(dbContact);
             dbContacts.add(dbContact);
         });
-        return dbContacts;
+        return transformDbContactsToContact(dbContacts);
     }
 
     @Transactional
     @Override
     public RawContact getContact(String name) {
-        RawContact rawContact = new RawContact();
         List<DbContact> dbContacts = dbContactDao.findByName(name);
         if (dbContacts.isEmpty()) {
             return null;
         }
-        rawContact.setName(name);
-        rawContact.setPhones(dbContacts
-                .stream().map(DbContact::getPhone).collect(Collectors.toList()));
-        return rawContact;
+        return RawContact.builder().name(name).phones(dbContacts
+                .stream().map(DbContact::getPhone).collect(Collectors.toList())).build();
     }
 
     @Transactional
     @Override
-    public List<DbContact> updateContact(RawContact rawContact) {
+    public Contact updateContact(RawContact rawContact) {
         if (!dbContactDao.findByName(rawContact.getName()).isEmpty()) {
             List<DbContact> dbContacts = dbContactDao.findByName(rawContact.getName());
             if (dbContacts.isEmpty()) {
-                return dbContacts;
+                return transformDbContactsToContact(dbContacts);
             }
             dbContactDao.delete(dbContacts);
             createContact(rawContact);
-            return dbContacts;
+            return transformDbContactsToContact(dbContacts);
         } else {
             List<DbContact> dbContacts = new ArrayList<>();
             rawContact.getPhones().forEach(phone ->
                     dbContactDao.findByPhone(phone).forEach(dbContact -> {
-                        dbContact.setName(rawContact.getName());
+                        dbContact = DbContact.builder().name(rawContact.getName()).phone(dbContact.getPhone()).build();
                         dbContacts.add(dbContact);
+                        dbContactDao.delete(dbContactDao.findByPhone(phone));
                         dbContactDao.save(dbContact);
                     }));
-            return dbContacts;
+            return transformDbContactsToContact(dbContacts);
         }
     }
 
     @Transactional
     @Override
-    public List<DbContact> deleteContact(String name) {
+    public Contact deleteContact(String name) {
         List<DbContact> dbContacts = dbContactDao.findByName(name);
+        Contact contact = transformDbContactsToContact(dbContacts);
         dbContactDao.delete(dbContacts);
-        return dbContacts;
+        return contact;
     }
 
     private Contact transformRawContactToContact(RawContact rawContact) {
-        Contact contact = new Contact();
-        contact.setName(rawContact.getName());
+        String contactName = rawContact.getName();
         String phoneString = "";
         for (String phone : rawContact.getPhones()) {
             phoneString = phoneString.concat(phone) + ", ";
         }
+        phoneString = deleteExtraComma(phoneString);
+        return Contact.builder().name(contactName).phones(phoneString).build();
+    }
+
+    private Contact transformDbContactsToContact(List<DbContact> dbContacts) {
+        if (dbContacts.isEmpty()) {
+            return null;
+        }
+        String contactName = dbContacts.get(0).getName();
+        String phoneString = dbContacts.stream().map(dbContact ->
+                dbContact.getPhone() + ", ").collect(Collectors.joining());
+        phoneString = deleteExtraComma(phoneString);
+        return Contact.builder().name(contactName).phones(phoneString).build();
+    }
+
+    private String deleteExtraComma(String phoneString) {
         phoneString = phoneString.trim();
         if (phoneString.length() > 0 && phoneString.charAt(phoneString.length() - 1) == ',') {
             phoneString = phoneString.substring(0, phoneString.length() - 1);
         }
-        contact.setPhones(phoneString);
-        return contact;
+        return phoneString;
     }
 }
+
